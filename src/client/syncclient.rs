@@ -1,9 +1,8 @@
-use crate::common::Command;
+use crate::common::*;
 use crate::errors::*;
 use std::net::TcpStream;
 
 use serde::{Deserialize, Serialize};
-use strum_macros::Display;
 use tungstenite::{connect, stream::MaybeTlsStream, Message, WebSocket};
 
 #[derive(Serialize)]
@@ -40,7 +39,8 @@ pub struct SyncClient {
 
 impl SyncClient {
     pub fn connect() -> Result<SyncClient, Error> {
-        let (client, _) = connect("ws://localhost:23074");
+        let (client, _) =
+            connect("ws://localhost:23074").unwrap_or_else(errors::Error::ClientNotConnected);
         Ok(SyncClient {
             client,
             devel: false,
@@ -48,7 +48,8 @@ impl SyncClient {
     }
 
     pub fn connect_with_devel() -> Result<SyncClient, Error> {
-        let (client, _) = connect("ws://localhost:23074")?;
+        let (client, _) =
+            connect("ws://localhost:23074").unwrap_or_else(errors::Error::ClientNotConnected);
         Ok(SyncClient {
             client,
             devel: true,
