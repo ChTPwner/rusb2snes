@@ -140,21 +140,18 @@ impl SyncClient {
         Ok(usbreply.Results[0].to_string())
     }
     pub fn list_device(&mut self) -> Result<Vec<String>, Box<Error>> {
-        self.send_command(Command::DeviceList, vec![])
-            .map_err(|e| Box::new(*e) as Box<Error>)?;
-        let usbreply = self.get_reply().map_err(|e| Box::new(*e) as Box<Error>)?;
+        self.send_command(Command::DeviceList, vec![])?;
+        let usbreply = self.get_reply()?;
         Ok(usbreply.Results)
     }
     pub fn attach(&mut self, device: &String) -> Result<(), Box<Error>> {
-        self.send_command(Command::Attach, vec![device.to_string()])
-            .map_err(|e| Box::new(*e) as Box<Error>)?;
+        self.send_command(Command::Attach, vec![device.to_string()])?;
         Ok(())
     }
 
     pub fn info(&mut self) -> Result<Infos, Box<Error>> {
-        self.send_command(Command::Info, vec![])
-            .map_err(|e| Box::new(*e) as Box<Error>)?;
-        let usbreply = self.get_reply().map_err(|e| Box::new(*e) as Box<Error>)?;
+        self.send_command(Command::Info, vec![])?;
+        let usbreply = self.get_reply()?;
         let info: Vec<String> = usbreply.Results;
         Ok(Infos {
             version: info[0].clone(),
@@ -164,25 +161,21 @@ impl SyncClient {
         })
     }
     pub fn reset(&mut self) -> Result<(), Box<Error>> {
-        self.send_command(Command::Reset, vec![])
-            .map_err(|e| Box::new(*e) as Box<Error>)?;
+        self.send_command(Command::Reset, vec![])?;
         Ok(())
     }
     pub fn menu(&mut self) -> Result<(), Box<Error>> {
-        self.send_command(Command::Menu, vec![])
-            .map_err(|e| Box::new(*e) as Box<Error>)?;
+        self.send_command(Command::Menu, vec![])?;
         Ok(())
     }
     pub fn boot(&mut self, toboot: &str) -> Result<(), Box<Error>> {
-        self.send_command(Command::Boot, vec![toboot.to_owned()])
-            .map_err(|e| Box::new(*e) as Box<Error>)?;
+        self.send_command(Command::Boot, vec![toboot.to_owned()])?;
         Ok(())
     }
 
     pub fn ls(&mut self, path: &String) -> Result<Vec<USB2SnesFileInfo>, Box<Error>> {
-        self.send_command(Command::List, vec![path.to_string()])
-            .map_err(|e| Box::new(*e) as Box<Error>)?;
-        let usbreply = self.get_reply().map_err(|e| Box::new(*e) as Box<Error>)?;
+        self.send_command(Command::List, vec![path.to_string()])?;
+        let usbreply = self.get_reply()?;
         let vec_info = usbreply.Results;
         let mut toret: Vec<USB2SnesFileInfo> = vec![];
         let mut i = 0;
@@ -208,9 +201,7 @@ impl SyncClient {
         let mut start = 0;
         let mut stop = 1024;
         while stop <= data.len() {
-            self.client
-                .send(Message::binary(&data[start..stop]))
-                .map_err(|e| Box::new(e) as Box<Error>)?;
+            self.client.send(Message::binary(&data[start..stop]))?;
             start += 1024;
             stop += 1024;
             if stop > data.len() {
@@ -221,10 +212,13 @@ impl SyncClient {
     }
     pub fn get_file(&mut self, path: &str) -> Result<Vec<u8>, Box<Error>> {
         self.send_command(Command::GetFile, vec![path.to_owned()])?;
-        let string_hex = self.get_reply()?.Results[0].to_string();
-        let size = usize::from_str_radix(&string_hex, 16).unwrap();
+        let usb2snes_reply = self.get_reply()?;
+        let string_hex = &usb2snes_reply.Results[0];
+        // TODO: should fix this unwrap
+        let size = usize::from_str_radix(string_hex, 16).unwrap();
         let mut data: Vec<u8> = Vec::with_capacity(size);
         loop {
+            // TODO: should fix this unwrap
             let reply = self.client.read().unwrap();
             match reply {
                 Message::Binary(msgdata) => {
