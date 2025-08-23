@@ -221,10 +221,9 @@ impl SyncClient {
     }
     pub fn get_file(&mut self, path: &str) -> Result<Vec<u8>, Box<Error>> {
         self.send_command(Command::GetFile, vec![path.to_owned()])?;
-        let string_hex = self.get_reply().map_err(|e| Error::from(*e))?.Results[0].to_string();
+        let string_hex = self.get_reply()?.Results[0].to_string();
         let size = usize::from_str_radix(&string_hex, 16).unwrap();
-        let mut data: Vec<u8> = vec![];
-        data.reserve(size);
+        let mut data: Vec<u8> = Vec::with_capacity(size);
         loop {
             let reply = self.client.read().unwrap();
             match reply {
@@ -241,19 +240,17 @@ impl SyncClient {
         }
         Ok(data)
     }
-    pub fn remove_path(&mut self, path: &str) -> Result<(), Error> {
-        self.send_command(Command::Remove, vec![path.to_owned()])
-            .map_err(|e| Error::from(*e))
+    pub fn remove_path(&mut self, path: &str) -> Result<(), Box<Error>> {
+        self.send_command(Command::Remove, vec![path.to_owned()])?;
+        Ok(())
     }
-    pub fn get_address(&mut self, address: u32, size: usize) -> Result<Vec<u8>, Error> {
+    pub fn get_address(&mut self, address: u32, size: usize) -> Result<Vec<u8>, Box<Error>> {
         self.send_command_with_space(
             Command::GetAddress,
             Some(Space::SNES),
             vec![format!("{:x}", address), format!("{:x}", size)],
-        )
-        .map_err(|e| Error::from(*e))?;
-        let mut data: Vec<u8> = vec![];
-        data.reserve(size);
+        )?;
+        let mut data: Vec<u8> = Vec::with_capacity(size);
         loop {
             let reply = self.client.read()?;
             match reply {
@@ -275,9 +272,8 @@ impl SyncClient {
         &mut self,
         addresses: Vec<u32>,
         sizes: Vec<usize>,
-    ) -> Result<Vec<u8>, Error> {
-        let mut v_arg: Vec<String> = vec![];
-        v_arg.reserve(addresses.len() * 2);
+    ) -> Result<Vec<u8>, Box<Error>> {
+        let mut v_arg: Vec<String> = Vec::with_capacity(addresses.len() * 2);
         let mut cpt = 0;
         let mut total_size: usize = 0;
         while cpt < addresses.len() {
@@ -286,8 +282,7 @@ impl SyncClient {
             total_size += sizes[cpt];
             cpt += 1
         }
-        self.send_command_with_space(Command::GetAddress, Some(Space::SNES), v_arg)
-            .map_err(|e| Error::from(*e))?;
+        self.send_command_with_space(Command::GetAddress, Some(Space::SNES), v_arg)?;
         let data = self.parse_multi_addresses(total_size)?;
         Ok(data)
     }
@@ -304,7 +299,7 @@ impl SyncClient {
             total_size += size;
         }
         self.send_command_with_space(Command::GetAddress, Some(Space::SNES), args)?;
-        let data = self.parse_multi_addresses(total_size).map_err(|e| e)?;
+        let data = self.parse_multi_addresses(total_size)?;
         let mut ret: Vec<Vec<u8>> = vec![];
         let mut consumed = 0;
         for &(_address, size) in pairs.iter() {
@@ -314,9 +309,8 @@ impl SyncClient {
         Ok(ret)
     }
 
-    fn parse_multi_addresses(&mut self, size: usize) -> Result<Vec<u8>, Error> {
-        let mut data: Vec<u8> = vec![];
-        data.reserve(size);
+    fn parse_multi_addresses(&mut self, size: usize) -> Result<Vec<u8>, Box<Error>> {
+        let mut data: Vec<u8> = Vec::with_capacity(size);
         loop {
             let reply = self.client.read()?;
             match reply {
