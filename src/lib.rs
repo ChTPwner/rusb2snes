@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use serde::{Deserialize, Serialize};
 use strum_macros::Display;
 use tungstenite::Error;
-use tungstenite::{connect, stream::MaybeTlsStream, Message, WebSocket};
+use tungstenite::{connect, stream::MaybeTlsStream, Bytes, Message, WebSocket};
 
 #[derive(Display, Debug)]
 pub enum Command {
@@ -32,7 +32,7 @@ pub enum Space {
     CMD,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Infos {
     pub version: String,
     pub dev_type: String,
@@ -118,7 +118,7 @@ impl SyncClient {
         let mut textreply: String = String::from("");
         match reply {
             Message::Text(value) => {
-                textreply = value;
+                textreply = value.to_string();
             }
             _ => {
                 println!("Error getting a reply");
@@ -200,9 +200,14 @@ impl SyncClient {
         )?;
         let mut start = 0;
         let mut stop = 1024;
-        while stop <= data.len() {
-            self.client.send(Message::binary(&data[start..stop]))?;
-            start += 1024;
+        // let test = Bytes::from(data);
+        let data_len = data.len();
+
+        while start < data_len {
+            let odata = data[start..stop].to_vec();
+            let message = Message::binary(odata);
+            self.client.send(message)?;
+            start = stop;
             stop += 1024;
             if stop > data.len() {
                 stop = data.len();
