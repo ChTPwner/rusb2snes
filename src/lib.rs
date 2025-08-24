@@ -3,7 +3,7 @@ use std::net::TcpStream;
 use serde::{Deserialize, Serialize};
 use strum_macros::Display;
 use tungstenite::Error;
-use tungstenite::{connect, stream::MaybeTlsStream, Bytes, Message, WebSocket};
+use tungstenite::{connect, stream::MaybeTlsStream, Message, WebSocket};
 
 #[derive(Display, Debug)]
 pub enum Command {
@@ -55,11 +55,12 @@ struct USB2SnesResult {
     Results: Vec<String>,
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum USB2SnesFileType {
     File = 0,
     Dir = 1,
 }
+#[derive(Debug, PartialEq)]
 pub struct USB2SnesFileInfo {
     pub name: String,
     pub file_type: USB2SnesFileType,
@@ -204,7 +205,7 @@ impl SyncClient {
         let data_len = data.len();
 
         while start < data_len {
-            let odata = data[start..stop].to_vec();
+            let odata = data[start..stop].to_owned();
             let message = Message::binary(odata);
             self.client.send(message)?;
             start = stop;
@@ -267,7 +268,7 @@ impl SyncClient {
         Ok(data)
     }
 
-    pub fn get_multi_address_as_u8(
+    pub fn get_multi_address_as_vec(
         &mut self,
         addresses: Vec<u32>,
         sizes: Vec<usize>,
@@ -286,7 +287,7 @@ impl SyncClient {
         Ok(data)
     }
 
-    pub fn get_multi_address_as_vec_u8(
+    pub fn get_multi_address_from_pairs(
         &mut self,
         pairs: &[(u32, usize)],
     ) -> Result<Vec<Vec<u8>>, Box<Error>> {
