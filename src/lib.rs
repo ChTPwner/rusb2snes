@@ -27,7 +27,6 @@ pub enum Command {
 #[derive(Display, Debug)]
 #[allow(dead_code)]
 pub enum Space {
-    None,
     SNES,
     CMD,
 }
@@ -44,8 +43,7 @@ pub struct Infos {
 #[allow(non_snake_case)]
 struct USB2SnesQuery {
     Opcode: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    Space: Option<String>,
+    Space: String,
     Flags: Vec<String>,
     Operands: Vec<String>,
 }
@@ -71,37 +69,46 @@ pub struct SyncClient {
     devel: bool,
 }
 impl SyncClient {
-    pub fn connect() -> Result<SyncClient, Box<Error>> {
-        let (client, _) = connect("ws://localhost:23074").map_err(|e| Box::new(e) as Box<Error>)?;
+    pub fn connect(address: Option<String>, port: Option<u16>) -> Result<SyncClient, Box<Error>> {
+        let ws_port = port.unwrap_or(23074);
+        let ws_address = address.unwrap_or("localhost".to_string());
+        let ws = format!("ws://{}:{}", ws_address, ws_port);
+        // Vjmatcah port {
+        //     Some(p) => port.to_owned(),
+        //     None => 23074,
+        // };
+        let (client, _) = connect(ws).map_err(|e| Box::new(e) as Box<Error>)?;
         Ok(SyncClient {
             client,
             devel: false,
         })
     }
-    pub fn connect_with_devel() -> Result<SyncClient, Box<Error>> {
-        let (client, _) = connect("ws://localhost:23074").map_err(|e| Box::new(e) as Box<Error>)?;
-        Ok(SyncClient {
-            client,
-            devel: true,
-        })
+
+    pub fn connect_with_devel(
+        address: Option<String>,
+        port: Option<u16>,
+    ) -> Result<SyncClient, Box<Error>> {
+        let mut client = SyncClient::connect(address, port)?;
+        client.devel = true;
+        Ok(client)
     }
     fn send_command(&mut self, command: Command, args: Vec<String>) -> Result<(), Box<Error>> {
-        self.send_command_with_space(command, None, args)?;
+        self.send_command_with_space(command, Space::SNES, args)?;
         Ok(())
     }
     fn send_command_with_space(
         &mut self,
         command: Command,
-        space: Option<Space>,
+        space: Space,
         args: Vec<String>,
     ) -> Result<(), Box<Error>> {
         if self.devel {
             println!("Send command : {:?}", command);
         }
-        let nspace: Option<String> = space.map(|sp| sp.to_string());
+        // let nspace: String = space.map(|sp| sp.to_string());
         let query = USB2SnesQuery {
             Opcode: command.to_string(),
-            Space: nspace,
+            Space: space.to_string(),
             Flags: vec![],
             Operands: args,
         };
@@ -247,7 +254,7 @@ impl SyncClient {
     pub fn get_address(&mut self, address: u32, size: usize) -> Result<Vec<u8>, Box<Error>> {
         self.send_command_with_space(
             Command::GetAddress,
-            Some(Space::SNES),
+            Space::SNES,
             vec![format!("{:x}", address), format!("{:x}", size)],
         )?;
         let mut data: Vec<u8> = Vec::with_capacity(size);
@@ -282,7 +289,7 @@ impl SyncClient {
             total_size += sizes[cpt];
             cpt += 1
         }
-        self.send_command_with_space(Command::GetAddress, Some(Space::SNES), v_arg)?;
+        self.send_command_with_space(Command::GetAddress, Space::SNES, v_arg)?;
         let data = self.parse_multi_addresses(total_size)?;
         Ok(data)
     }
@@ -298,7 +305,7 @@ impl SyncClient {
             args.push(format!("{:x}", size));
             total_size += size;
         }
-        self.send_command_with_space(Command::GetAddress, Some(Space::SNES), args)?;
+        self.send_command_with_space(Command::GetAddress, Space::SNES, args)?;
         let data = self.parse_multi_addresses(total_size)?;
         let mut ret: Vec<Vec<u8>> = vec![];
         let mut consumed = 0;
