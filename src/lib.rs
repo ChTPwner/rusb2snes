@@ -24,6 +24,7 @@ pub enum Command {
 
     GetAddress,
 }
+
 #[derive(Display, Debug)]
 #[allow(dead_code)]
 pub enum Space {
@@ -47,6 +48,7 @@ struct USB2SnesQuery {
     Flags: Vec<String>,
     Operands: Vec<String>,
 }
+
 #[derive(Deserialize)]
 #[allow(non_snake_case)]
 struct USB2SnesResult {
@@ -58,6 +60,7 @@ pub enum USB2SnesFileType {
     File = 0,
     Dir = 1,
 }
+
 #[derive(Debug, PartialEq)]
 pub struct USB2SnesFileInfo {
     pub name: String,
@@ -68,15 +71,12 @@ pub struct SyncClient {
     client: WebSocket<MaybeTlsStream<TcpStream>>,
     devel: bool,
 }
+
 impl SyncClient {
     pub fn connect(address: Option<String>, port: Option<u16>) -> Result<SyncClient, Box<Error>> {
         let ws_port = port.unwrap_or(23074);
         let ws_address = address.unwrap_or("localhost".to_string());
         let ws = format!("ws://{}:{}", ws_address, ws_port);
-        // Vjmatcah port {
-        //     Some(p) => port.to_owned(),
-        //     None => 23074,
-        // };
         let (client, _) = connect(ws).map_err(|e| Box::new(e) as Box<Error>)?;
         Ok(SyncClient {
             client,
@@ -92,10 +92,12 @@ impl SyncClient {
         client.devel = true;
         Ok(client)
     }
+
     fn send_command(&mut self, command: Command, args: Vec<String>) -> Result<(), Box<Error>> {
         self.send_command_with_space(command, Space::SNES, args)?;
         Ok(())
     }
+
     fn send_command_with_space(
         &mut self,
         command: Command,
@@ -138,20 +140,24 @@ impl SyncClient {
         }
         Ok(serde_json::from_str(&textreply).unwrap())
     }
+
     pub fn set_name(&mut self, name: String) -> Result<(), Box<Error>> {
         self.send_command(Command::Name, vec![name])?;
         Ok(())
     }
+
     pub fn app_version(&mut self) -> Result<String, Box<Error>> {
         self.send_command(Command::AppVersion, vec![])?;
         let usbreply = self.get_reply()?;
         Ok(usbreply.Results[0].to_string())
     }
+
     pub fn list_device(&mut self) -> Result<Vec<String>, Box<Error>> {
         self.send_command(Command::DeviceList, vec![])?;
         let usbreply = self.get_reply()?;
         Ok(usbreply.Results)
     }
+
     pub fn attach(&mut self, device: &String) -> Result<(), Box<Error>> {
         self.send_command(Command::Attach, vec![device.to_string()])?;
         Ok(())
@@ -168,14 +174,17 @@ impl SyncClient {
             flags: (info[3..].to_vec()),
         })
     }
+
     pub fn reset(&mut self) -> Result<(), Box<Error>> {
         self.send_command(Command::Reset, vec![])?;
         Ok(())
     }
+
     pub fn menu(&mut self) -> Result<(), Box<Error>> {
         self.send_command(Command::Menu, vec![])?;
         Ok(())
     }
+
     pub fn boot(&mut self, toboot: &str) -> Result<(), Box<Error>> {
         self.send_command(Command::Boot, vec![toboot.to_owned()])?;
         Ok(())
@@ -201,6 +210,7 @@ impl SyncClient {
         }
         Ok(toret)
     }
+
     pub fn send_file(&mut self, path: &String, data: Vec<u8>) -> Result<(), Box<Error>> {
         self.send_command(
             Command::PutFile,
@@ -223,6 +233,7 @@ impl SyncClient {
         }
         Ok(())
     }
+
     pub fn get_file(&mut self, path: &str) -> Result<Vec<u8>, Box<Error>> {
         self.send_command(Command::GetFile, vec![path.to_owned()])?;
         let usb2snes_reply = self.get_reply()?;
@@ -247,10 +258,12 @@ impl SyncClient {
         }
         Ok(data)
     }
+
     pub fn remove_path(&mut self, path: &str) -> Result<(), Box<Error>> {
         self.send_command(Command::Remove, vec![path.to_owned()])?;
         Ok(())
     }
+
     pub fn get_address(&mut self, address: u32, size: usize) -> Result<Vec<u8>, Box<Error>> {
         self.send_command_with_space(
             Command::GetAddress,
