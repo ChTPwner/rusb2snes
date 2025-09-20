@@ -61,6 +61,21 @@ pub enum USB2SnesFileType {
     Dir = 1,
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+pub struct USB2SnesEndpoint {
+    pub address: String,
+    pub port: u16,
+}
+
+impl Default for USB2SnesEndpoint {
+    fn default() -> Self {
+        USB2SnesEndpoint {
+            address: "127.0.0.1".to_string(),
+            port: 23074,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct USB2SnesFileInfo {
     pub name: String,
@@ -73,10 +88,10 @@ pub struct SyncClient {
 }
 
 impl SyncClient {
-    pub fn connect(address: Option<String>, port: Option<u16>) -> Result<SyncClient, Box<Error>> {
-        let ws_port = port.unwrap_or(23074);
-        let ws_address = address.unwrap_or("localhost".to_string());
-        let ws = format!("ws://{}:{}", ws_address, ws_port);
+    pub fn connect(endpoint: &USB2SnesEndpoint) -> Result<SyncClient, Box<Error>> {
+        // let ws_port = port.unwrap_or(23074);
+        // let ws_address = address.unwrap_or("localhost".to_string());
+        let ws = format!("ws://{}:{}", endpoint.address, endpoint.port);
         let (client, _) = connect(ws).map_err(|e| Box::new(e) as Box<Error>)?;
         Ok(SyncClient {
             client,
@@ -84,11 +99,8 @@ impl SyncClient {
         })
     }
 
-    pub fn connect_with_devel(
-        address: Option<String>,
-        port: Option<u16>,
-    ) -> Result<SyncClient, Box<Error>> {
-        let mut client = SyncClient::connect(address, port)?;
+    pub fn connect_with_devel(endpoint: &USB2SnesEndpoint) -> Result<SyncClient, Box<Error>> {
+        let mut client = SyncClient::connect(endpoint)?;
         client.devel = true;
         Ok(client)
     }

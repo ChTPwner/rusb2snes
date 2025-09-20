@@ -1,4 +1,5 @@
-use rusb2snes::{Infos, SyncClient};
+use core::time;
+use rusb2snes::{Infos, SyncClient, USB2SnesEndpoint, USB2SnesFileInfo};
 use std::error::Error;
 use std::fs;
 
@@ -7,13 +8,11 @@ const TEST_FILE: &str = "240pSuite_test.sfc";
 
 #[cfg(test)]
 mod tests {
-    use core::time;
-
-    use rusb2snes::USB2SnesFileInfo;
 
     use super::*;
     fn test_connect() -> Result<SyncClient, Box<dyn Error>> {
-        let mut usb2snes = SyncClient::connect(None, None)?;
+        let endpoint = USB2SnesEndpoint::default();
+        let mut usb2snes = SyncClient::connect(&endpoint)?;
         usb2snes.set_name(CLIENT_NAME.to_string())?;
         let devices = usb2snes.list_device()?;
         usb2snes.attach(&devices[0])?;

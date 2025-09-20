@@ -1,7 +1,9 @@
 use rusb2snes::SyncClient;
+use rusb2snes::USB2SnesEndpoint;
 
 fn main() {
-    let mut usb2snes = SyncClient::connect(None, None).unwrap();
+    let endpoint = USB2SnesEndpoint::default();
+    let mut usb2snes = SyncClient::connect(&endpoint).unwrap();
 
     usb2snes.set_name(String::from("example")).unwrap();
 
