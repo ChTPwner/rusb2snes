@@ -1,8 +1,9 @@
+use std::error::Error;
 use std::net::TcpStream;
 
 use serde::{Deserialize, Serialize};
 use strum_macros::Display;
-use tungstenite::Error;
+// use tungstenite::Error;
 use tungstenite::{connect, stream::MaybeTlsStream, Message, WebSocket};
 
 #[derive(Display, Debug)]
@@ -88,24 +89,24 @@ pub struct SyncClient {
 }
 
 impl SyncClient {
-    pub fn connect(endpoint: &USB2SnesEndpoint) -> Result<SyncClient, Box<Error>> {
+    pub fn connect(endpoint: &USB2SnesEndpoint) -> Result<SyncClient, Box<dyn Error>> {
         // let ws_port = port.unwrap_or(23074);
         // let ws_address = address.unwrap_or("localhost".to_string());
         let ws = format!("ws://{}:{}", endpoint.address, endpoint.port);
-        let (client, _) = connect(ws).map_err(|e| Box::new(e) as Box<Error>)?;
+        let (client, _) = connect(ws).map_err(|e| Box::new(e) as Box<dyn Error>)?;
         Ok(SyncClient {
             client,
             devel: false,
         })
     }
 
-    pub fn connect_with_devel(endpoint: &USB2SnesEndpoint) -> Result<SyncClient, Box<Error>> {
+    pub fn connect_with_devel(endpoint: &USB2SnesEndpoint) -> Result<SyncClient, Box<dyn Error>> {
         let mut client = SyncClient::connect(endpoint)?;
         client.devel = true;
         Ok(client)
     }
 
-    fn send_command(&mut self, command: Command, args: Vec<String>) -> Result<(), Box<Error>> {
+    fn send_command(&mut self, command: Command, args: Vec<String>) -> Result<(), Box<dyn Error>> {
         self.send_command_with_space(command, Space::SNES, args)?;
         Ok(())
     }
@@ -115,7 +116,7 @@ impl SyncClient {
         command: Command,
         space: Space,
         args: Vec<String>,
-    ) -> Result<(), Box<Error>> {
+    ) -> Result<(), Box<dyn Error>> {
         if self.devel {
             println!("Send command : {:?}", command);
         }
@@ -126,7 +127,7 @@ impl SyncClient {
             Flags: vec![],
             Operands: args,
         };
-        let json = serde_json::to_string_pretty(&query).unwrap();
+        let json = serde_json::to_string_pretty(&query)?;
         if self.devel {
             println!("{}", json);
         }
@@ -135,14 +136,15 @@ impl SyncClient {
         Ok(())
     }
 
-    fn get_reply(&mut self) -> Result<USB2SnesResult, Box<Error>> {
-        let reply = self.client.read().map_err(Box::new)?;
+    fn get_reply(&mut self) -> Result<USB2SnesResult, Box<dyn Error>> {
+        let reply = self.client.read()?;
         let mut textreply: String = String::from("");
         match reply {
             Message::Text(value) => {
                 textreply = value.to_string();
             }
             _ => {
+                dbg!(&reply);
                 println!("Error getting a reply");
             }
         };
@@ -150,32 +152,32 @@ impl SyncClient {
             println!("Reply:");
             println!("{}", textreply);
         }
-        Ok(serde_json::from_str(&textreply).unwrap())
+        Ok(serde_json::from_str(&textreply)?)
     }
 
-    pub fn set_name(&mut self, name: String) -> Result<(), Box<Error>> {
+    pub fn set_name(&mut self, name: String) -> Result<(), Box<dyn Error>> {
         self.send_command(Command::Name, vec![name])?;
         Ok(())
     }
 
-    pub fn app_version(&mut self) -> Result<String, Box<Error>> {
+    pub fn app_version(&mut self) -> Result<String, Box<dyn Error>> {
         self.send_command(Command::AppVersion, vec![])?;
         let usbreply = self.get_reply()?;
         Ok(usbreply.Results[0].to_string())
     }
 
-    pub fn list_device(&mut self) -> Result<Vec<String>, Box<Error>> {
+    pub fn list_device(&mut self) -> Result<Vec<String>, Box<dyn Error>> {
         self.send_command(Command::DeviceList, vec![])?;
         let usbreply = self.get_reply()?;
         Ok(usbreply.Results)
     }
 
-    pub fn attach(&mut self, device: &String) -> Result<(), Box<Error>> {
+    pub fn attach(&mut self, device: &String) -> Result<(), Box<dyn Error>> {
         self.send_command(Command::Attach, vec![device.to_string()])?;
         Ok(())
     }
 
-    pub fn info(&mut self) -> Result<Infos, Box<Error>> {
+    pub fn info(&mut self) -> Result<Infos, Box<dyn Error>> {
         self.send_command(Command::Info, vec![])?;
         let usbreply = self.get_reply()?;
         let info: Vec<String> = usbreply.Results;
@@ -187,22 +189,22 @@ impl SyncClient {
         })
     }
 
-    pub fn reset(&mut self) -> Result<(), Box<Error>> {
+    pub fn reset(&mut self) -> Result<(), Box<dyn Error>> {
         self.send_command(Command::Reset, vec![])?;
         Ok(())
     }
 
-    pub fn menu(&mut self) -> Result<(), Box<Error>> {
+    pub fn menu(&mut self) -> Result<(), Box<dyn Error>> {
         self.send_command(Command::Menu, vec![])?;
         Ok(())
     }
 
-    pub fn boot(&mut self, toboot: &str) -> Result<(), Box<Error>> {
+    pub fn boot(&mut self, toboot: &str) -> Result<(), Box<dyn Error>> {
         self.send_command(Command::Boot, vec![toboot.to_owned()])?;
         Ok(())
     }
 
-    pub fn ls(&mut self, path: &String) -> Result<Vec<USB2SnesFileInfo>, Box<Error>> {
+    pub fn ls(&mut self, path: &String) -> Result<Vec<USB2SnesFileInfo>, Box<dyn Error>> {
         self.send_command(Command::List, vec![path.to_string()])?;
         let usbreply = self.get_reply()?;
         let vec_info = usbreply.Results;
@@ -223,7 +225,7 @@ impl SyncClient {
         Ok(toret)
     }
 
-    pub fn send_file(&mut self, path: &String, data: Vec<u8>) -> Result<(), Box<Error>> {
+    pub fn send_file(&mut self, path: &String, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
         self.send_command(
             Command::PutFile,
             vec![path.to_string(), format!("{:x}", data.len())],
@@ -246,16 +248,14 @@ impl SyncClient {
         Ok(())
     }
 
-    pub fn get_file(&mut self, path: &str) -> Result<Vec<u8>, Box<Error>> {
+    pub fn get_file(&mut self, path: &str) -> Result<Vec<u8>, Box<dyn Error>> {
         self.send_command(Command::GetFile, vec![path.to_owned()])?;
         let usb2snes_reply = self.get_reply()?;
         let string_hex = &usb2snes_reply.Results[0];
-        // TODO: should fix this unwrap
-        let size = usize::from_str_radix(string_hex, 16).unwrap();
+        let size = usize::from_str_radix(string_hex, 16)?;
         let mut data: Vec<u8> = Vec::with_capacity(size);
         loop {
-            // TODO: should fix this unwrap
-            let reply = self.client.read().unwrap();
+            let reply = self.client.read()?;
             match reply {
                 Message::Binary(msgdata) => {
                     data.extend(&msgdata);
@@ -271,12 +271,12 @@ impl SyncClient {
         Ok(data)
     }
 
-    pub fn remove_path(&mut self, path: &str) -> Result<(), Box<Error>> {
+    pub fn remove_path(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
         self.send_command(Command::Remove, vec![path.to_owned()])?;
         Ok(())
     }
 
-    pub fn get_address(&mut self, address: u32, size: usize) -> Result<Vec<u8>, Box<Error>> {
+    pub fn get_address(&mut self, address: u32, size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
         self.send_command_with_space(
             Command::GetAddress,
             Space::SNES,
@@ -304,7 +304,7 @@ impl SyncClient {
         &mut self,
         addresses: Vec<u32>,
         sizes: Vec<usize>,
-    ) -> Result<Vec<u8>, Box<Error>> {
+    ) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut v_arg: Vec<String> = Vec::with_capacity(addresses.len() * 2);
         let mut cpt = 0;
         let mut total_size: usize = 0;
@@ -322,7 +322,7 @@ impl SyncClient {
     pub fn get_multi_address_from_pairs(
         &mut self,
         pairs: &[(u32, usize)],
-    ) -> Result<Vec<Vec<u8>>, Box<Error>> {
+    ) -> Result<Vec<Vec<u8>>, Box<dyn Error>> {
         let mut args = vec![];
         let mut total_size = 0;
         for &(address, size) in pairs.iter() {
@@ -341,7 +341,7 @@ impl SyncClient {
         Ok(ret)
     }
 
-    fn parse_multi_addresses(&mut self, size: usize) -> Result<Vec<u8>, Box<Error>> {
+    fn parse_multi_addresses(&mut self, size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
         let mut data: Vec<u8> = Vec::with_capacity(size);
         loop {
             let reply = self.client.read()?;
