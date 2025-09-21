@@ -90,8 +90,6 @@ pub struct SyncClient {
 
 impl SyncClient {
     pub fn connect(endpoint: &USB2SnesEndpoint) -> Result<SyncClient, Box<dyn Error>> {
-        // let ws_port = port.unwrap_or(23074);
-        // let ws_address = address.unwrap_or("localhost".to_string());
         let ws = format!("ws://{}:{}", endpoint.address, endpoint.port);
         let (client, _) = connect(ws).map_err(|e| Box::new(e) as Box<dyn Error>)?;
         Ok(SyncClient {
@@ -138,20 +136,12 @@ impl SyncClient {
 
     fn get_reply(&mut self) -> Result<USB2SnesResult, Box<dyn Error>> {
         let reply = self.client.read()?;
-        let mut textreply: String = String::from("");
-        match reply {
-            Message::Text(value) => {
-                textreply = value.to_string();
-            }
+        let textreply = match reply {
+            Message::Text(value) => value.to_string(),
             _ => {
-                dbg!(&reply);
-                println!("Error getting a reply");
+                return Err("Error getting a reply test".into());
             }
         };
-        if self.devel {
-            println!("Reply:");
-            println!("{}", textreply);
-        }
         Ok(serde_json::from_str(&textreply)?)
     }
 
@@ -261,7 +251,7 @@ impl SyncClient {
                     data.extend(&msgdata);
                 }
                 _ => {
-                    println!("Error getting a reply");
+                    return Err(format!("Error getting file {}", path).into());
                 }
             }
             if data.len() == size {
@@ -290,7 +280,7 @@ impl SyncClient {
                     data.extend(&msgdata);
                 }
                 _ => {
-                    println!("Error getting a reply");
+                    return Err(format!("Error getting a reply from address {:x}", &address).into())
                 }
             }
             if data.len() == size {
@@ -349,7 +339,7 @@ impl SyncClient {
                 Message::Binary(msgdata) => {
                     data.extend(&msgdata);
                 }
-                _ => println!("Error getting a reply"),
+                _ => return Err("Error parsing a reply from multiple addresses".into()),
             }
             if data.len() == size {
                 break;
