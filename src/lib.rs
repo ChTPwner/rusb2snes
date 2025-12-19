@@ -62,7 +62,7 @@ pub enum USB2SnesFileType {
     Dir = 1,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct USB2SnesEndpoint {
     pub address: String,
     pub port: u16,
