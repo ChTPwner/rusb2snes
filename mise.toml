@@ -1,5 +1,8 @@
 [tools]
-rust = { version = "1.97.1", profile = "default" }
+rust = { version = "1.97.1", profile = "default", components = [
+  "rustfmt",
+  "clippy",
+] }
 markdownlint-cli2 = "latest"
 prek = "latest"
 rust-analyzer = "2026-08-03"
