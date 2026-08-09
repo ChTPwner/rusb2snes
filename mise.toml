@@ -1,0 +1,5 @@
+[tools]
+markdownlint-cli2 = "latest"
+prek = "latest"
+rust = { version = "1.97.1", profile = "default" }
+rust-analyzer = "2026-08-03"

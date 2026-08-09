@@ -1,0 +1,29 @@
+[[repos]]
+repo = "https://github.com/pre-commit/pre-commit-hooks"
+rev = "v6.0.0"
+hooks = [{ id = "trailing-whitespace" }, { id = "end-of-file-fixer" }, { id = "check-toml"}]
+
+[[repos]]
+repo = "https://github.com/gitleaks/gitleaks"
+rev = "v8.24.2"
+hooks = [{ id = "gitleaks" }]
+
+[[repos]]
+repo = "local"
+hooks = [
+  {
+    id = "cargo-fmt",
+    name = "cargo fmt",
+    language = "system",
+    entry = "cargo fmt --",
+    types = ["rust"],
+    pass_filenames = false,
+  },
+{
+    id = "markdown-cli2",
+    name = "Fix and formats markdown",
+    language = "system",
+    entry = "markdownlint-cli2",
+    types = ["markdown"]
+  }
+]
