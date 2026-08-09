@@ -18,7 +18,7 @@ repos:
         types: [rust]
         pass_filenames: false
       - id: taplo-fmt
-        name: check toml files
+        name: format toml files
         language: system
         entry: taplo fmt
       - id: taplo-check
