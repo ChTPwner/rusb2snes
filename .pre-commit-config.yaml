@@ -14,7 +14,19 @@ repos:
       - id: cargo-fmt
         name: cargo fmt
         language: system
-        entry: cargo fmt --
+        entry: cargo fmt --all --
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-clippy
+        name: cargo clippy
+        language: system
+        entry: cargo clippy --all-targets --all-features -- -D warnings
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-check
+        name: cargo check
+        language: system
+        entry: cargo check --all-targets
         types: [rust]
         pass_filenames: false
       - id: taplo-fmt
