@@ -1,10 +1,12 @@
+use futures_util::{SinkExt, StreamExt};
 use std::error::Error;
-use std::net::TcpStream;
+use tokio::net::TcpStream;
+use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use serde::{Deserialize, Serialize};
 use strum_macros::Display;
 // use tungstenite::Error;
-use tungstenite::{connect, stream::MaybeTlsStream, Message, WebSocket};
 
 #[derive(Display, Debug)]
 pub enum Command {
@@ -83,38 +85,47 @@ pub struct USB2SnesFileInfo {
     pub file_type: USB2SnesFileType,
 }
 
-pub struct SyncClient {
-    client: WebSocket<MaybeTlsStream<TcpStream>>,
+pub struct AsyncClient {
+    client: WebSocketStream<MaybeTlsStream<TcpStream>>,
     devel: bool,
 }
 
-impl SyncClient {
-    pub fn connect(endpoint: &USB2SnesEndpoint) -> Result<SyncClient, Box<dyn Error>> {
+impl AsyncClient {
+    pub async fn connect(
+        endpoint: &USB2SnesEndpoint,
+    ) -> Result<AsyncClient, Box<dyn Error + Send + Sync>> {
         let ws = format!("ws://{}:{}", endpoint.address, endpoint.port);
-        let (client, _) = connect(ws).map_err(|e| Box::new(e) as Box<dyn Error>)?;
-        Ok(SyncClient {
+        let (client, _) = tokio_tungstenite::connect_async(&ws).await?;
+        Ok(AsyncClient {
             client,
             devel: false,
         })
     }
 
-    pub fn connect_with_devel(endpoint: &USB2SnesEndpoint) -> Result<SyncClient, Box<dyn Error>> {
-        let mut client = SyncClient::connect(endpoint)?;
+    pub async fn connect_with_devel(
+        endpoint: &USB2SnesEndpoint,
+    ) -> Result<AsyncClient, Box<dyn Error + Send + Sync>> {
+        let mut client = AsyncClient::connect(endpoint).await?;
         client.devel = true;
         Ok(client)
     }
 
-    fn send_command(&mut self, command: Command, args: Vec<String>) -> Result<(), Box<dyn Error>> {
-        self.send_command_with_space(command, Space::SNES, args)?;
+    async fn send_command(
+        &mut self,
+        command: Command,
+        args: Vec<String>,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.send_command_with_space(command, Space::SNES, args)
+            .await?;
         Ok(())
     }
 
-    fn send_command_with_space(
+    async fn send_command_with_space(
         &mut self,
         command: Command,
         space: Space,
         args: Vec<String>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if self.devel {
             println!("Send command : {:?}", command);
         }
@@ -129,13 +140,17 @@ impl SyncClient {
         if self.devel {
             println!("{}", json);
         }
-        let message = Message::text(json);
-        self.client.send(message)?;
+        let message = Message::Text(json.into());
+        self.client.send(message).await?;
         Ok(())
     }
 
-    fn get_reply(&mut self) -> Result<USB2SnesResult, Box<dyn Error>> {
-        let reply = self.client.read()?;
+    async fn get_reply(&mut self) -> Result<USB2SnesResult, Box<dyn Error + Send + Sync>> {
+        let reply = self
+            .client
+            .next()
+            .await
+            .ok_or("WebSocket stream closed unexpectedly")??;
         let textreply = match reply {
             Message::Text(value) => value.to_string(),
             _ => {
@@ -145,31 +160,32 @@ impl SyncClient {
         Ok(serde_json::from_str(&textreply)?)
     }
 
-    pub fn set_name(&mut self, name: String) -> Result<(), Box<dyn Error>> {
-        self.send_command(Command::Name, vec![name])?;
+    pub async fn set_name(&mut self, name: String) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.send_command(Command::Name, vec![name]).await?;
         Ok(())
     }
 
-    pub fn app_version(&mut self) -> Result<String, Box<dyn Error>> {
-        self.send_command(Command::AppVersion, vec![])?;
-        let usbreply = self.get_reply()?;
+    pub async fn app_version(&mut self) -> Result<String, Box<dyn Error + Send + Sync>> {
+        self.send_command(Command::AppVersion, vec![]).await?;
+        let usbreply = self.get_reply().await?;
         Ok(usbreply.Results[0].to_string())
     }
 
-    pub fn list_device(&mut self) -> Result<Vec<String>, Box<dyn Error>> {
-        self.send_command(Command::DeviceList, vec![])?;
-        let usbreply = self.get_reply()?;
+    pub async fn list_device(&mut self) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
+        self.send_command(Command::DeviceList, vec![]).await?;
+        let usbreply = self.get_reply().await?;
         Ok(usbreply.Results)
     }
 
-    pub fn attach(&mut self, device: &String) -> Result<(), Box<dyn Error>> {
-        self.send_command(Command::Attach, vec![device.to_string()])?;
+    pub async fn attach(&mut self, device: &String) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.send_command(Command::Attach, vec![device.to_string()])
+            .await?;
         Ok(())
     }
 
-    pub fn info(&mut self) -> Result<Infos, Box<dyn Error>> {
-        self.send_command(Command::Info, vec![])?;
-        let usbreply = self.get_reply()?;
+    pub async fn info(&mut self) -> Result<Infos, Box<dyn Error + Send + Sync>> {
+        self.send_command(Command::Info, vec![]).await?;
+        let usbreply = self.get_reply().await?;
         let info: Vec<String> = usbreply.Results;
         Ok(Infos {
             version: info[0].clone(),
@@ -179,24 +195,29 @@ impl SyncClient {
         })
     }
 
-    pub fn reset(&mut self) -> Result<(), Box<dyn Error>> {
-        self.send_command(Command::Reset, vec![])?;
+    pub async fn reset(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.send_command(Command::Reset, vec![]).await?;
         Ok(())
     }
 
-    pub fn menu(&mut self) -> Result<(), Box<dyn Error>> {
-        self.send_command(Command::Menu, vec![])?;
+    pub async fn menu(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.send_command(Command::Menu, vec![]).await?;
         Ok(())
     }
 
-    pub fn boot(&mut self, toboot: &str) -> Result<(), Box<dyn Error>> {
-        self.send_command(Command::Boot, vec![toboot.to_owned()])?;
+    pub async fn boot(&mut self, toboot: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.send_command(Command::Boot, vec![toboot.to_owned()])
+            .await?;
         Ok(())
     }
 
-    pub fn ls(&mut self, path: &String) -> Result<Vec<USB2SnesFileInfo>, Box<dyn Error>> {
-        self.send_command(Command::List, vec![path.to_string()])?;
-        let usbreply = self.get_reply()?;
+    pub async fn ls(
+        &mut self,
+        path: &String,
+    ) -> Result<Vec<USB2SnesFileInfo>, Box<dyn Error + Send + Sync>> {
+        self.send_command(Command::List, vec![path.to_string()])
+            .await?;
+        let usbreply = self.get_reply().await?;
         let vec_info = usbreply.Results;
         let mut toret: Vec<USB2SnesFileInfo> = vec![];
         let mut i = 0;
@@ -215,11 +236,16 @@ impl SyncClient {
         Ok(toret)
     }
 
-    pub fn send_file(&mut self, path: &String, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
+    pub async fn send_file(
+        &mut self,
+        path: &String,
+        data: Vec<u8>,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         self.send_command(
             Command::PutFile,
             vec![path.to_string(), format!("{:x}", data.len())],
-        )?;
+        )
+        .await?;
         let mut start = 0;
         let mut stop = 1024;
         // let test = Bytes::from(data);
@@ -227,8 +253,8 @@ impl SyncClient {
 
         while start < data_len {
             let odata = data[start..stop].to_owned();
-            let message = Message::binary(odata);
-            self.client.send(message)?;
+            let message = Message::Binary(odata.into());
+            self.client.send(message).await?;
             start = stop;
             stop += 1024;
             if stop > data.len() {
@@ -238,14 +264,19 @@ impl SyncClient {
         Ok(())
     }
 
-    pub fn get_file(&mut self, path: &str) -> Result<Vec<u8>, Box<dyn Error>> {
-        self.send_command(Command::GetFile, vec![path.to_owned()])?;
-        let usb2snes_reply = self.get_reply()?;
+    pub async fn get_file(&mut self, path: &str) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+        self.send_command(Command::GetFile, vec![path.to_owned()])
+            .await?;
+        let usb2snes_reply = self.get_reply().await?;
         let string_hex = &usb2snes_reply.Results[0];
         let size = usize::from_str_radix(string_hex, 16)?;
         let mut data: Vec<u8> = Vec::with_capacity(size);
         loop {
-            let reply = self.client.read()?;
+            let reply = self
+                .client
+                .next()
+                .await
+                .ok_or("WebSocket stream closed unexpectedly")??;
             match reply {
                 Message::Binary(msgdata) => {
                     data.extend(&msgdata);
@@ -261,20 +292,30 @@ impl SyncClient {
         Ok(data)
     }
 
-    pub fn remove_path(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
-        self.send_command(Command::Remove, vec![path.to_owned()])?;
+    pub async fn remove_path(&mut self, path: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.send_command(Command::Remove, vec![path.to_owned()])
+            .await?;
         Ok(())
     }
 
-    pub fn get_address(&mut self, address: u32, size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
+    pub async fn get_address(
+        &mut self,
+        address: u32,
+        size: usize,
+    ) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
         self.send_command_with_space(
             Command::GetAddress,
             Space::SNES,
             vec![format!("{:x}", address), format!("{:x}", size)],
-        )?;
+        )
+        .await?;
         let mut data: Vec<u8> = Vec::with_capacity(size);
         loop {
-            let reply = self.client.read()?;
+            let reply = self
+                .client
+                .next()
+                .await
+                .ok_or("WebSocket stream closed unexpectedly")??;
             match reply {
                 Message::Binary(msgdata) => {
                     data.extend(&msgdata);
@@ -290,11 +331,11 @@ impl SyncClient {
         Ok(data)
     }
 
-    pub fn get_multi_address_as_vec(
+    pub async fn get_multi_address_as_vec(
         &mut self,
         addresses: Vec<u32>,
         sizes: Vec<usize>,
-    ) -> Result<Vec<u8>, Box<dyn Error>> {
+    ) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
         let mut v_arg: Vec<String> = Vec::with_capacity(addresses.len() * 2);
         let mut cpt = 0;
         let mut total_size: usize = 0;
@@ -304,15 +345,16 @@ impl SyncClient {
             total_size += sizes[cpt];
             cpt += 1
         }
-        self.send_command_with_space(Command::GetAddress, Space::SNES, v_arg)?;
-        let data = self.parse_multi_addresses(total_size)?;
+        self.send_command_with_space(Command::GetAddress, Space::SNES, v_arg)
+            .await?;
+        let data = self.parse_multi_addresses(total_size).await?;
         Ok(data)
     }
 
-    pub fn get_multi_address_from_pairs(
+    pub async fn get_multi_address_from_pairs(
         &mut self,
         pairs: &[(u32, usize)],
-    ) -> Result<Vec<Vec<u8>>, Box<dyn Error>> {
+    ) -> Result<Vec<Vec<u8>>, Box<dyn Error + Send + Sync>> {
         let mut args = vec![];
         let mut total_size = 0;
         for &(address, size) in pairs.iter() {
@@ -320,8 +362,9 @@ impl SyncClient {
             args.push(format!("{:x}", size));
             total_size += size;
         }
-        self.send_command_with_space(Command::GetAddress, Space::SNES, args)?;
-        let data = self.parse_multi_addresses(total_size)?;
+        self.send_command_with_space(Command::GetAddress, Space::SNES, args)
+            .await?;
+        let data = self.parse_multi_addresses(total_size).await?;
         let mut ret: Vec<Vec<u8>> = vec![];
         let mut consumed = 0;
         for &(_address, size) in pairs.iter() {
@@ -331,10 +374,17 @@ impl SyncClient {
         Ok(ret)
     }
 
-    fn parse_multi_addresses(&mut self, size: usize) -> Result<Vec<u8>, Box<dyn Error>> {
+    async fn parse_multi_addresses(
+        &mut self,
+        size: usize,
+    ) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
         let mut data: Vec<u8> = Vec::with_capacity(size);
         loop {
-            let reply = self.client.read()?;
+            let reply = self
+                .client
+                .next()
+                .await
+                .ok_or("WebSocket stream closed unexpectedly")??;
             match reply {
                 Message::Binary(msgdata) => {
                     data.extend(&msgdata);
